@@ -1,0 +1,231 @@
+module ChompPlusPlus
+where
+
+type NumInitRows = Int
+type NumInitCols = Int
+type MaxChomp = Int
+
+data CellContent = Coins Int | Poison Int | Antidote Int | Empty deriving (Show,Eq)
+type GameBoard = [[CellContent]]
+
+
+data Player = P1| P2 deriving (Show,Eq)
+
+data PlayerState = PS_ac Int Int deriving (Show,Eq)
+
+type GameState = (NumInitRows, NumInitCols, MaxChomp, GameBoard,
+                    Player, Maybe PlayerState, Maybe PlayerState)
+-- Player specifies which player makes the next move
+-- the last two Maybe PlayerState refers to state of P1 and P2 respectively
+
+
+-- Task 1 end when one is dead or when all cells are gone
+isGameEnd :: GameState -> Bool
+isGameEnd (_, _, _, board, _, ps1, ps2)   -- implement isGameEnd here
+    | all null board = True -- checksif is empty for every line of the board
+    | ps1 == Nothing = True
+    | ps2 == Nothing = True
+    | otherwise = False
+
+-- Task 2a
+cellToString :: CellContent -> String
+cellToString content = case content of
+     Coins c 
+        | c<10 -> "C " ++ show c ++ " |"
+        | otherwise -> "C " ++ show c ++ "|"
+     Poison p
+        | p < 10 -> "P " ++ show p ++ " |"
+        | otherwise -> "P " ++ show p ++ "|"
+     Antidote a
+        | a<10 -> "A " ++ show a ++ " |"
+        | otherwise -> "A " ++ show a ++ "|"
+     Empty -> "    |"
+
+-- Task 2b
+rowToString :: [CellContent] -> Int -> Int -> String
+rowToString row rowNum numCols 
+    | length row < numCols = show rowNum ++ "  |" ++ helper row ++ printX (numCols - (length row))
+    | length row == 0 = printX numCols
+ --length row == numCols
+--what happens if <?
+    | otherwise = show rowNum ++ "  |" ++ helper row 
+        where
+            -- Helper function to process each cell
+            helper :: [CellContent]-> String
+            helper [] = [] -- Fill the remaining space with 'X'
+            helper (cell:rest) = cellToString cell ++ helper rest 
+            -- helper function only for the X parts
+            printX :: Int -> String
+            printX times = replicate (times * 5) 'X'
+
+-- Task 2
+firstline:: Int -> String
+firstline cols = "  " ++ concatMap formatCol [0 .. cols - 1]
+    where 
+        formatCol :: Int -> String
+        formatCol n = replicate (5 - length (show n)) ' ' ++ show n
+
+displayRows :: GameBoard -> Int -> Int -> [String]
+displayRows [onerow] numRows numCols = rowToString onerow numRows numCols : []
+displayRows (firstrow:rest) numRows numCols = 
+    rowToString firstrow numRows numCols: displayRows rest (numRows+1) numCols 
+
+isPlayerAlive :: Maybe PlayerState -> Int -> String
+isPlayerAlive Nothing num = "Player " ++ show num ++ " dies."
+isPlayerAlive (Just(PS_ac anti coin)) num = "Player " ++show num++ "'s state: " ++ show anti ++ " antidotes, " ++ show coin ++ " coins."
+
+displayMaxChomp :: MaxChomp -> String
+displayMaxChomp maxchomp = "Maximum number of cells can be chomped in one move is " ++ show maxchomp ++ "."
+
+displayGame :: GameState -> [String]
+displayGame (rows, cols, maxchomp, board, pl, ps1, ps2) 
+    | isGameEnd (rows, cols, maxchomp, board, pl, ps1, ps2) == True =
+        [firstline cols , "" ] ++ displayRows board 0 cols 
+        ++ [isPlayerAlive ps1 1 , isPlayerAlive ps2 2]
+
+    | isGameEnd (rows, cols, maxchomp, board, pl, ps1, ps2) == False =
+        [firstline cols , "" ] ++ displayRows board 0 cols 
+        ++ [isPlayerAlive ps1 1 , isPlayerAlive ps2 2]
+        ++ [displayMaxChomp maxchomp]
+
+
+-- Task 3
+isLegalMove :: GameState -> Int -> Int -> Bool
+isLegalMove (numRows, numCols, maxchomp, board, pl, ps1, ps2) r c 
+    | r >= numRows || r < 0 || c >= numCols || c < 0 = False
+    | unChomped board r c == False = False
+    | countChomped board r c > maxchomp = False
+    | otherwise = True
+
+--take the nth element if it exists
+takeN :: Int -> [a] -> Maybe a
+takeN _ [] = Nothing
+takeN n lst 
+    | n > length lst = Nothing
+takeN 0 (x:_) = Just x
+takeN n (_:xs)  = takeN (n-1) xs
+
+
+--see if the cell got chomped or not
+unChomped :: GameBoard -> Int -> Int -> Bool 
+unChomped board r c = 
+    case takeN r board of
+        Nothing -> False  -- Row does not exist
+        Just row -> case takeN c row of
+            Nothing -> False  -- Column does not exist in the row
+            Just _ -> True  -- The cell exists
+
+--takes the first n elements 
+takeFirst :: Int -> [a] -> [a]
+takeFirst 0 lst = []
+takeFirst n [] = []
+takeFirst n (x:xs) = x:takeFirst (n-1) xs
+
+-- Remove the first n elements from the list
+removeN :: Int -> [a] -> [a] 
+removeN 0 lst = lst
+removeN _ [] = []  -- If n is greater than the list length, return empty
+removeN n (_:xs) = removeN (n-1) xs
+
+--count how many cells would be chomped by one move
+countChomped :: GameBoard-> Int -> Int -> Int
+countChomped [] _ _ = 0 
+countChomped board r c = case takeFirst (r + 1) board of  -- ignore the board after r row
+    row:rest 
+        | length row < c -> countChomped rest r c 
+        | otherwise -> ((length row) - c) + countChomped rest r c 
+
+
+
+-- Task 4
+makeMove :: GameState -> Int -> Int -> GameState
+makeMove (numRows, numCols, maxchomp, board, pl, ps1, ps2) r c
+    | pl == P1
+        = (numRows, numCols, maxchomp, updateBoard board r c,
+        P2, updatePlState ps1 board r c, ps2)
+    | pl == P2
+        = (numRows, numCols, maxchomp,updateBoard board r c,
+        P1, ps1, updatePlState ps2 board r c)
+
+
+updateBoard :: GameBoard -> Int -> Int -> GameBoard
+--updateBoard board r c = board
+updateBoard board r c = updateBoardSec1 (takeFirst (r+1) board) c ++ removeN (r+1) board
+--takeout the elements until c-1 from the rows until r, and then add the untouched rows after r
+
+
+updateBoardSec1 :: GameBoard -> Int -> GameBoard
+updateBoardSec1 [] _ = []
+updateBoardSec1 (row:moreRows) col = [takeFirst col row] ++ updateBoardSec1 moreRows col
+
+totalCoins :: [CellContent] -> Int
+totalCoins [] = 0
+totalCoins (n:ns) = case n of
+    Coins count -> count + totalCoins ns
+    _-> totalCoins ns
+
+totalAntidote :: [CellContent] -> Int
+totalAntidote [] =0
+totalAntidote (n:ns) = case n of
+    Antidote count -> count + totalAntidote ns
+    _-> totalAntidote ns
+
+totalPoison :: [CellContent] -> Int
+totalPoison [] =0 
+totalPoison (n:ns) = case n of
+    Poison count -> count + totalPoison ns
+    _-> totalPoison ns
+
+chompedParts :: GameBoard -> Int -> [CellContent] 
+chompedParts [] _ = []
+chompedParts (row:moreRows) col = removeN col row ++ chompedParts moreRows col
+
+{--
+updatePlState :: Maybe PlayerState -> GameBoard -> Int -> Int -> Maybe PlayerState
+updatePlState Nothing _ _ _ = Nothing
+updatePlState (Just (PS_ac anti coins)) [] _ _ = Just (PS_ac anti coins)
+--updatePlState (Just (PS_ac anti _)) board r c 
+--    | anti == totalPoison (chompedParts (takeFirst (r+1) board) c) = Nothing
+updatePlState (Just (PS_ac anti coins)) board r c = case takeFirst (r+1) board of
+        --only need to use the r rows
+    [] -> Just (PS_ac anti coins)
+    rows:rest -> updatePlState (adjustPSLine (removeN c rows) (PS_ac anti coins)) rest r c
+--}
+
+updatePlState :: Maybe PlayerState -> GameBoard -> Int -> Int -> Maybe PlayerState 
+updatePlState Nothing _ _ _ = Nothing 
+updatePlState (Just (PS_ac anti coins)) [] _ _ = Just (PS_ac anti coins)
+updatePlState (Just (PS_ac anti coins)) board r c = case takeFirst (r+1) board of--ignore rows after r
+    [] -> Just (PS_ac anti coins)
+    lst 
+        | anti < newPoison -> Nothing
+        | otherwise -> Just (PS_ac newAnti newCoin)
+            where 
+                newPoison = totalPoison (chompedParts lst c)
+                newAnti = anti + totalAntidote (chompedParts lst c) - newPoison
+                newCoin = coins + totalCoins (chompedParts lst c)
+
+
+{---
+--calculate the playerstate after the row
+adjustPSLine :: [CellContent] -> PlayerState -> Maybe PlayerState    
+adjustPSLine lst (PS_ac anti coin) 
+    | anti <= totalPoison lst = Nothing
+    | newAnti == 0 = Nothing
+    | otherwise = Just (PS_ac newAnti newCoin)
+    where 
+        newAnti = anti + totalAntidote lst - totalPoison lst
+        newCoin = coin + totalCoins lst
+
+--}
+
+-- Task 5
+endGameMsg :: GameState -> String
+endGameMsg (_, _, _, _, _, Nothing, (Just _)) =
+    "Player 2 wins because Player 1 dies."
+endGameMsg (_, _, _, _, _, (Just _), Nothing) =
+    "Player 1 wins because Player 2 dies."
+endGameMsg (_, _, _, _, _, (Just (PS_ac _ c1)), (Just (PS_ac _ c2))) 
+    | c1 == c2 = "The game ends up with a draw because both players have " ++ show c1 ++ " coins."
+    | c1 > c2 = "Player 1 wins because Player 1 has " ++ show c1 ++ " coins, which are more than " ++ show c2 ++ " coins of Player 2."
+    | c1 < c2 = "Player 2 wins because Player 2 has " ++ show c2 ++ " coins, which are more than " ++ show c1 ++ " coins of Player 1."
