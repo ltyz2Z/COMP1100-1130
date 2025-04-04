@@ -1,0 +1,46 @@
+module Assignment1_Warmup
+where
+
+data CellContent = Coins Int | Poison Int | Antidote Int | Empty deriving (Show,Eq)
+
+totalCoins :: [CellContent] -> Int
+-- implement totalCoins here
+totalCoins lst = case lst of
+    [] -> 0
+    n:ns -> case n of
+        Coins count -> count + totalCoins ns
+        _-> totalCoins ns
+
+
+totalAntidote :: [CellContent] -> Int
+-- implement totalAntidote here
+totalAntidote lst = case lst of
+    [] -> 0
+    n:ns -> case n of
+        Antidote count -> count + totalAntidote ns
+        _-> totalAntidote ns
+
+totalPoison :: [CellContent] -> Int
+-- implement totalPoison here
+totalPoison lst = case lst of
+    [] -> 0
+    n:ns -> case n of
+        Poison count -> count + totalPoison ns
+        _-> totalPoison ns
+
+-- players are carrying some number of antidote doses, and some quantity of coins
+data PlayerState = PS_ac Int Int deriving (Show,Eq)
+
+adjustPlayerState :: [CellContent] -> PlayerState -> Maybe PlayerState
+-- implement adjustPlayerState here
+adjustPlayerState lst state = case state of
+    PS_ac anti coin
+        | anti < totalPoison lst -> Nothing --dies
+        | otherwise -> Just(PS_ac newAnti newCoin)
+            where 
+                newAnti = anti + totalAntidote lst - totalPoison lst
+                newCoin = coin + totalCoins lst
+
+
+
+
